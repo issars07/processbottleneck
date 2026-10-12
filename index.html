@@ -114,8 +114,8 @@
                 <h2 class="text-2xl font-bold mb-4">Status</h2>
                 <div class="space-y-3">
                     <p>Units in Input Pile: <span id="buffer1Count" class="font-mono">100</span></p>
-                    <p>Units in Buffer 1-2: <span id="buffer2Count" class="font-mono">0</span><span id="buffer2Cap" class="font-mono text-gray-400"> / 10</span></p>
-                    <p>Units in Buffer 2-3: <span id="buffer3Count" class="font-mono">0</span><span id="buffer3Cap" class="font-mono text-gray-400"> / 10</span></p>
+                    <p>Units in Buffer 1-2: <span id="buffer2Count" class="font-mono">0</span><span id="buffer2Cap" class="font-mono text-gray-400"> / 12</span></p>
+                    <p>Units in Buffer 2-3: <span id="buffer3Count" class="font-mono">0</span><span id="buffer3Cap" class="font-mono text-gray-400"> / 12</span></p>
                     <p>Work in process (buffers + stages): <span id="wipCount" class="font-mono">0</span></p>
                     <p class="text-xl font-semibold">Total Processed: <span id="totalProcessed" class="font-mono text-green-400">0</span> <span class="text-base font-normal text-gray-400">of <span id="totalUnitsDisplay">100</span></span></p>
                     <p class="text-sm italic text-gray-400 mt-2">Simulation time: <span id="simTime">0.00</span>s</p>
@@ -172,7 +172,7 @@
                     <h3 class="text-lg font-bold">Steady-State Start</h3>
                     <div class="field">
                         <label for="wip2Input">WIP in Buffer 1-2</label>
-                        <input type="number" id="wip2Input" min="0" max="100" step="1" value="10">
+                        <input type="number" id="wip2Input" min="0" max="100" step="1" value="12">
                     </div>
                     <div class="field">
                         <label for="wip3Input">WIP in Buffer 2-3</label>
