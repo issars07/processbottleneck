@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bottleneck Simulation</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #1a202c;
+            color: #e2e8f0;
+        }
+        canvas {
+            background-color: #2d3748;
+            border-radius: 0.75rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+        input[type="range"] {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 8px;
+            background: #4a5568;
+            border-radius: 5px;
+            outline: none;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 20px;
+            height: 20px;
+            background: #63b3ed;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: background .15s ease-in-out;
+        }
+        input[type="range"]::-webkit-slider-thumb:hover { background: #4299e1; }
+        input[type="range"]::-moz-range-thumb {
+            width: 20px; height: 20px; background: #63b3ed;
+            border: none; border-radius: 50%; cursor: pointer;
+        }
+        input[type="number"] {
+            background: #1a202c;
+            border: 1px solid #4a5568;
+            border-radius: 0.5rem;
+            padding: 0.4rem 0.6rem;
+            width: 6rem;
+            color: #e2e8f0;
+            font-family: ui-monospace, monospace;
+        }
+        input[type="number"]:disabled { opacity: 0.4; }
+        input[type="number"]:focus { outline: 2px solid #63b3ed; outline-offset: 1px; }
+        input[type="checkbox"] { width: 1rem; height: 1rem; accent-color: #63b3ed; }
+        .panel {
+            background-color: #2d3748;
+            padding: 1.5rem;
+            border-radius: 0.75rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+        .setup-card {
+            background-color: #232a36;
+            padding: 1.25rem;
+            border-radius: 0.75rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.9rem;
+        }
+        .field { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; font-size: 0.875rem; }
+        .btn {
+            font-weight: 700; padding: 0.5rem 1rem; border-radius: 0.5rem;
+            color: white; transition: background-color .15s;
+        }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        .hint { font-size: 0.75rem; color: #a0aec0; line-height: 1.4; }
+        .flash { color: #68d391; font-size: 0.8rem; min-height: 1.1rem; }
+    </style>
+</head>
+<body class="p-8 flex flex-col items-center">
+
+    <h1 class="text-4xl font-extrabold text-center mb-10 text-green-400">Bottleneck Simulation</h1>
+
+    <div class="w-full max-w-7xl">
+        <canvas id="simulationCanvas"></canvas>
+
+        <div class="flex flex-col md:flex-row gap-6 mt-6 w-full">
+            <!-- Controls -->
+            <div class="panel flex-1">
+                <h2 class="text-2xl font-bold mb-4">Controls</h2>
+                <div class="space-y-6">
+                    <div>
+                        <label for="rate1" class="block text-sm font-medium">Stage 1 Rate: <span id="rate1Value">70</span> units/minute</label>
+                        <input type="range" id="rate1" min="1" max="100" step="1" value="70">
+                    </div>
+                    <div>
+                        <label for="rate2" class="block text-sm font-medium">Stage 2 Rate: <span id="rate2Value">40</span> units/minute</label>
+                        <input type="range" id="rate2" min="1" max="100" step="1" value="40">
+                    </div>
+                    <div>
+                        <label for="rate3" class="block text-sm font-medium">Stage 3 Rate: <span id="rate3Value">60</span> units/minute</label>
+                        <input type="range" id="rate3" min="1" max="100" step="1" value="60">
+                    </div>
+                </div>
+                <div class="flex space-x-4 mt-6">
+                    <button id="startButton" class="btn flex-1 bg-green-500 hover:bg-green-600">Start</button>
+                    <button id="resetButton" class="btn flex-1 bg-red-500 hover:bg-red-600">Reset</button>
+                </div>
+            </div>
+
+            <!-- Status -->
+            <div class="panel flex-1">
+                <h2 class="text-2xl font-bold mb-4">Status</h2>
+                <div class="space-y-3">
+                    <p>Units in Input Pile: <span id="buffer1Count" class="font-mono">100</span></p>
+                    <p>Units in Buffer 1-2: <span id="buffer2Count" class="font-mono">0</span><span id="buffer2Cap" class="font-mono text-gray-400"> / 10</span></p>
+                    <p>Units in Buffer 2-3: <span id="buffer3Count" class="font-mono">0</span><span id="buffer3Cap" class="font-mono text-gray-400"> / 10</span></p>
+                    <p>Work in process (buffers + stages): <span id="wipCount" class="font-mono">0</span></p>
+                    <p class="text-xl font-semibold">Total Processed: <span id="totalProcessed" class="font-mono text-green-400">0</span> <span class="text-base font-normal text-gray-400">of <span id="totalUnitsDisplay">100</span></span></p>
+                    <p class="text-sm italic text-gray-400 mt-2">Simulation time: <span id="simTime">0.00</span>s</p>
+                    <p class="mt-4 text-orange-300 font-bold">Bottleneck: <span id="bottleneckStatus">Stage 2</span></p>
+                    <p class="font-bold">System Output: <span id="systemOutputRate">0</span> units/min</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- System Setup -->
+        <div class="panel mt-6">
+            <h2 class="text-2xl font-bold mb-1">System Setup</h2>
+            <p class="hint mb-4">Applying raw materials or a steady-state start resets the run. Buffer limits can be changed at any time, even while running.</p>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+                <!-- 1) Raw materials -->
+                <div class="setup-card">
+                    <h3 class="text-lg font-bold">Raw Materials</h3>
+                    <div class="field">
+                        <label for="totalUnitsInput">Total units</label>
+                        <input type="number" id="totalUnitsInput" min="1" max="1000" step="1" value="100">
+                    </div>
+                    <p class="hint">How many units the run processes in total (1–1000).</p>
+                    <div class="mt-auto">
+                        <button id="applyUnitsButton" class="btn w-full bg-blue-500 hover:bg-blue-600">Set Raw Materials</button>
+                        <p id="unitsFlash" class="flash mt-2"></p>
+                    </div>
+                </div>
+
+                <!-- 2) Buffer limits -->
+                <div class="setup-card">
+                    <h3 class="text-lg font-bold">Buffer Space</h3>
+                    <label class="field justify-start cursor-pointer">
+                        <input type="checkbox" id="limitBuffersCheckbox" checked>
+                        <span>Limit buffer space</span>
+                    </label>
+                    <div class="field">
+                        <label for="cap2Input">Buffer 1-2 capacity</label>
+                        <input type="number" id="cap2Input" min="1" max="100" step="1" value="10">
+                    </div>
+                    <div class="field">
+                        <label for="cap3Input">Buffer 2-3 capacity</label>
+                        <input type="number" id="cap3Input" min="1" max="100" step="1" value="10">
+                    </div>
+                    <p class="hint">When a buffer is full, the stage before it stops working completely: it won't start a new unit, and a unit in progress pauses. The stage flashes "Blocking" until space frees up.</p>
+                    <div class="mt-auto">
+                        <button id="applyBuffersButton" class="btn w-full bg-blue-500 hover:bg-blue-600">Apply Buffer Limits</button>
+                        <p id="buffersFlash" class="flash mt-2"></p>
+                    </div>
+                </div>
+
+                <!-- 3) Steady state -->
+                <div class="setup-card">
+                    <h3 class="text-lg font-bold">Steady-State Start</h3>
+                    <div class="field">
+                        <label for="wip2Input">WIP in Buffer 1-2</label>
+                        <input type="number" id="wip2Input" min="0" max="100" step="1" value="10">
+                    </div>
+                    <div class="field">
+                        <label for="wip3Input">WIP in Buffer 2-3</label>
+                        <input type="number" id="wip3Input" min="0" max="100" step="1" value="0">
+                    </div>
+                    <label class="field justify-start cursor-pointer">
+                        <input type="checkbox" id="stagesBusyCheckbox" checked>
+                        <span>Each stage starts with a unit in progress</span>
+                    </label>
+                    <p class="hint">WIP is taken out of the raw-material total. "Suggest WIP" fills the buffers before the bottleneck and empties the ones after it, which is where a long-running line settles.</p>
+                    <div class="mt-auto flex gap-3">
+                        <button id="suggestWipButton" class="btn flex-1 bg-gray-600 hover:bg-gray-500">Suggest WIP</button>
+                        <button id="steadyStateButton" class="btn flex-1 bg-purple-500 hover:bg-purple-600">Initialize</button>
+                    </div>
+                    <p id="steadyFlash" class="flash"></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const $ = (id) => document.getElementById(id);
+
+        const canvas = $('simulationCanvas');
+        const ctx = canvas.getContext('2d');
+        const startButton = $('startButton');
+        const resetButton = $('resetButton');
+        const rate1Slider = $('rate1');
+        const rate2Slider = $('rate2');
+        const rate3Slider = $('rate3');
+
+        const COLORS = {
+            raw: '#ffffff',
+            afterStage1: '#fde047', // yellow
+            afterStage2: '#f97316', // orange
+            inStage3: '#22c55e',    // green
+            bottleneck: '#ef4444',
+            starving: '#63b3ed',
+            blocked: '#a855f7',     // full-buffer outline
+            blocking: '#ff3df2',    // bright magenta flash
+            blockingAlt: '#ffffff', // alternate flash color
+            overflow: '#ff4d4d',    // "Overflow!" flash
+            overflowAlt: '#fde047',
+            area: '#232a36'
+        };
+
+        let isRunning = false;
+        let loopActive = false;
+        let lastFrameTime = 0;
+        let simulationTime = 0;
+
+        const settings = {
+            totalUnits: 100,
+            rates: {
+                stage1: parseFloat(rate1Slider.value),
+                stage2: parseFloat(rate2Slider.value),
+                stage3: parseFloat(rate3Slider.value)
+            },
+            limitBuffers: true,
+            capacity: { buffer2: 10, buffer3: 10 }
+        };
+
+        function capOf(key) {
+            return settings.limitBuffers ? settings.capacity[key] : Infinity;
+        }
+
+        function makeUnits(n, color) {
+            return Array.from({ length: n }, () => ({ color }));
+        }
+        function emptyStage() {
+            return { item: null, timeRemaining: 0, duration: 0, blocked: false };
+        }
+        function makeInitialState() {
+            return {
+                buffer1: makeUnits(settings.totalUnits, COLORS.raw),
+                buffer2: [],
+                buffer3: [],
+                stage1: emptyStage(),
+                stage2: emptyStage(),
+                stage3: emptyStage(),
+                totalProcessed: 0
+            };
+        }
+        let state = makeInitialState();
+
+        // ---- Layout ----
+        const itemSize = 12;
+        const itemGap = 4;
+        const stageWidth = 120;
+        const stageHeight = 60;
+        const bufferWidth = 80;
+        const bufferHeight = 100;
+        const spacing = 60;
+
+        const coords = {};
+        coords.source  = { x: 50, y: 100 };
+        coords.stage1  = { x: coords.source.x  + stageWidth  + spacing, y: 150 };
+        coords.buffer2 = { x: coords.stage1.x  + stageWidth  + spacing, y: 100 };
+        coords.stage2  = { x: coords.buffer2.x + bufferWidth + spacing, y: 150 };
+        coords.buffer3 = { x: coords.stage2.x  + stageWidth  + spacing, y: 100 };
+        coords.stage3  = { x: coords.buffer3.x + bufferWidth + spacing, y: 150 };
+
+        // ---- Run control ----
+        function stopRun() {
+            isRunning = false;
+            startButton.textContent = 'Start';
+            startButton.disabled = false;
+        }
+        function resetRun(newState) {
+            stopRun();
+            simulationTime = 0;
+            state = newState || makeInitialState();
+            refresh();
+        }
+        function refresh() {
+            updateMetrics();
+            draw();
+        }
+
+        startButton.addEventListener('click', () => {
+            isRunning = !isRunning;
+            startButton.textContent = isRunning ? 'Pause' : 'Start';
+            if (isRunning && !loopActive) {
+                loopActive = true;
+                lastFrameTime = performance.now();
+                requestAnimationFrame(gameLoop);
+            }
+            refresh();
+        });
+        resetButton.addEventListener('click', () => resetRun());
+
+        function bindSlider(slider, label, key) {
+            slider.addEventListener('input', (e) => {
+                settings.rates[key] = parseFloat(e.target.value);
+                $(label).textContent = e.target.value;
+                refresh();
+            });
+        }
+        bindSlider(rate1Slider, 'rate1Value', 'stage1');
+        bindSlider(rate2Slider, 'rate2Value', 'stage2');
+        bindSlider(rate3Slider, 'rate3Value', 'stage3');
+
+        // ---- Setup panel ----
+        function readInt(input, min, max) {
+            let v = parseInt(input.value, 10);
+            if (isNaN(v)) v = min;
+            v = Math.min(max, Math.max(min, v));
+            input.value = v; // show the corrected value
+            return v;
+        }
+        function flash(id, text) {
+            const el = $(id);
+            el.textContent = text;
+            clearTimeout(el._t);
+            el._t = setTimeout(() => (el.textContent = ''), 3500);
+        }
+
+        // 1) Raw materials
+        $('applyUnitsButton').addEventListener('click', () => {
+            settings.totalUnits = readInt($('totalUnitsInput'), 1, 1000);
+            resetRun();
+            flash('unitsFlash', `Run reset with ${settings.totalUnits} units.`);
+        });
+
+        // 2) Buffer limits
+        const limitBox = $('limitBuffersCheckbox');
+        function syncCapInputs() {
+            $('cap2Input').disabled = !limitBox.checked;
+            $('cap3Input').disabled = !limitBox.checked;
+        }
+        limitBox.addEventListener('change', syncCapInputs);
+
+        $('applyBuffersButton').addEventListener('click', () => {
+            settings.limitBuffers = limitBox.checked;
+            settings.capacity.buffer2 = readInt($('cap2Input'), 1, 100);
+            settings.capacity.buffer3 = readInt($('cap3Input'), 1, 100);
+            refresh();
+            flash('buffersFlash', settings.limitBuffers
+                ? `Limits set: ${settings.capacity.buffer2} and ${settings.capacity.buffer3} units.`
+                : 'Buffers now have unlimited space.');
+        });
+
+        // 3) Steady state
+        function bottleneckIndex() {
+            const r = [settings.rates.stage1, settings.rates.stage2, settings.rates.stage3];
+            return r.indexOf(Math.min(...r)); // 0, 1 or 2
+        }
+
+        $('suggestWipButton').addEventListener('click', () => {
+            // A buffer feeding stage k (buffer2 -> stage index 1, buffer3 -> stage index 2)
+            // backs up when the bottleneck is at or after stage k, and drains when it's before.
+            const b = bottleneckIndex();
+            const fullLevel = (key) => settings.limitBuffers ? settings.capacity[key] : 10;
+            $('wip2Input').value = b >= 1 ? fullLevel('buffer2') : 0;
+            $('wip3Input').value = b >= 2 ? fullLevel('buffer3') : 0;
+            flash('steadyFlash', `Suggested for a Stage ${b + 1} bottleneck. Press Initialize to apply.`);
+        });
+
+        $('steadyStateButton').addEventListener('click', () => {
+            let wip2 = readInt($('wip2Input'), 0, 100);
+            let wip3 = readInt($('wip3Input'), 0, 100);
+
+            // Respect buffer limits
+            if (settings.limitBuffers) {
+                wip2 = Math.min(wip2, settings.capacity.buffer2);
+                wip3 = Math.min(wip3, settings.capacity.buffer3);
+            }
+
+            const busy = $('stagesBusyCheckbox').checked;
+            const stageUnits = busy ? 3 : 0;
+
+            // WIP comes out of the raw-material total; trim it if it doesn't fit
+            let remaining = settings.totalUnits;
+            const busyCount = Math.min(stageUnits, remaining); remaining -= busyCount;
+            wip3 = Math.min(wip3, remaining); remaining -= wip3;
+            wip2 = Math.min(wip2, remaining); remaining -= wip2;
+
+            $('wip2Input').value = wip2;
+            $('wip3Input').value = wip3;
+
+            const s = {
+                buffer1: makeUnits(remaining, COLORS.raw),
+                buffer2: makeUnits(wip2, COLORS.afterStage1),
+                buffer3: makeUnits(wip3, COLORS.afterStage2),
+                stage1: emptyStage(),
+                stage2: emptyStage(),
+                stage3: emptyStage(),
+                totalProcessed: 0
+            };
+
+            // Put a unit part-way through each stage (downstream first, if units are scarce)
+            const stageSpecs = [
+                ['stage3', 'stage3', COLORS.inStage3],
+                ['stage2', 'stage2', COLORS.afterStage2],
+                ['stage1', 'stage1', COLORS.afterStage1]
+            ];
+            stageSpecs.slice(0, busyCount).forEach(([key, rateKey, color]) => {
+                const duration = 60 / settings.rates[rateKey];
+                s[key] = {
+                    item: { color },
+                    duration,
+                    timeRemaining: duration * (0.2 + 0.6 * Math.random()),
+                    blocked: false
+                };
+            });
+
+            resetRun(s);
+            const wipTotal = wip2 + wip3 + busyCount;
+            flash('steadyFlash', `Initialized with ${wipTotal} units in process, ${remaining} in the raw pile.`);
+        });
+
+        // ---- Main loop ----
+        function gameLoop(timestamp) {
+            if (!isRunning) {
+                loopActive = false;
+                return;
+            }
+            const deltaTime = (timestamp - lastFrameTime) / 1000;
+            lastFrameTime = timestamp;
+
+            simulationTime += deltaTime;
+            update(deltaTime);
+
+            if (isFinished()) {
+                isRunning = false;
+                startButton.textContent = 'Finished';
+                startButton.disabled = true;
+            }
+
+            refresh();
+            requestAnimationFrame(gameLoop);
+        }
+
+        function isFinished() {
+            return state.buffer1.length === 0 && state.buffer2.length === 0 && state.buffer3.length === 0 &&
+                   !state.stage1.item && !state.stage2.item && !state.stage3.item;
+        }
+
+        // Runs one stage for dt seconds. Leftover time carries to the next unit.
+        // Blocking: while the output buffer is full the stage does no work at all —
+        // it won't pull a new unit, and a unit in progress is paused until space frees up.
+        function runStage(stage, input, output, outCap, rate, color, dt) {
+            let t = dt;
+            while (true) {
+                if (output && output.length >= outCap) break; // blocked: no space downstream
+                if (!stage.item) {
+                    if (input.length === 0) break;            // starving: nothing to work on
+                    stage.item = input.shift();
+                    stage.item.color = color;
+                    stage.duration = 60 / rate;
+                    stage.timeRemaining = stage.duration;
+                }
+                if (stage.timeRemaining > t) {
+                    stage.timeRemaining -= t;
+                    break;
+                }
+                t -= stage.timeRemaining;
+                stage.timeRemaining = 0;
+                if (output) output.push(stage.item);
+                else state.totalProcessed++;
+                stage.item = null;
+            }
+        }
+
+        // Current condition of each stage, derived from the state so it's always up to date
+        const STAGE_IO = [
+            { key: 'stage1', input: 'buffer1', output: 'buffer2' },
+            { key: 'stage2', input: 'buffer2', output: 'buffer3' },
+            { key: 'stage3', input: 'buffer3', output: null }
+        ];
+        function stageCondition(i) {
+            const io = STAGE_IO[i];
+            const stage = state[io.key];
+            if (io.output && state[io.output].length >= capOf(io.output)) return 'blocking';
+            if (isRunning && !stage.item && state[io.input].length === 0) return 'starving';
+            return 'normal';
+        }
+
+        function update(dt) {
+            // Downstream first, so space freed this frame is available to the stage upstream
+            runStage(state.stage3, state.buffer3, null,          Infinity,        settings.rates.stage3, COLORS.inStage3,    dt);
+            runStage(state.stage2, state.buffer2, state.buffer3, capOf('buffer3'), settings.rates.stage2, COLORS.afterStage2, dt);
+            runStage(state.stage1, state.buffer1, state.buffer2, capOf('buffer2'), settings.rates.stage1, COLORS.afterStage1, dt);
+        }
+
+        function updateMetrics() {
+            $('buffer1Count').textContent = state.buffer1.length;
+            $('buffer2Count').textContent = state.buffer2.length;
+            $('buffer3Count').textContent = state.buffer3.length;
+            $('buffer2Cap').textContent = settings.limitBuffers ? ` / ${settings.capacity.buffer2}` : ' (unlimited)';
+            $('buffer3Cap').textContent = settings.limitBuffers ? ` / ${settings.capacity.buffer3}` : ' (unlimited)';
+            const inStages = ['stage1', 'stage2', 'stage3'].filter(k => state[k].item).length;
+            $('wipCount').textContent = state.buffer2.length + state.buffer3.length + inStages;
+            $('totalProcessed').textContent = state.totalProcessed;
+            $('totalUnitsDisplay').textContent = settings.totalUnits;
+            $('simTime').textContent = simulationTime.toFixed(2);
+
+            const rates = [settings.rates.stage1, settings.rates.stage2, settings.rates.stage3];
+            const minRate = Math.min(...rates);
+            $('bottleneckStatus').textContent = rates
+                .map((r, i) => (r === minRate ? `Stage ${i + 1}` : null))
+                .filter(Boolean)
+                .join(', ');
+            $('systemOutputRate').textContent = minRate.toFixed(0);
+        }
+
+        // ---- Drawing ----
+        function drawLabel(text, cx, y, weight = 700, size = 20, color = '#e2e8f0', align = 'center') {
+            ctx.fillStyle = color;
+            ctx.font = `${weight} ${size}px Inter, sans-serif`;
+            ctx.textAlign = align;
+            ctx.fillText(text, cx, y);
+        }
+
+        function drawItems(items, x, y, width) {
+            const perRow = Math.floor((width - itemGap) / (itemSize + itemGap));
+            const rows = Math.floor((bufferHeight - itemGap) / (itemSize + itemGap));
+            const capacity = perRow * rows;
+            const shown = Math.min(items.length, capacity);
+            for (let i = 0; i < shown; i++) {
+                ctx.fillStyle = items[i].color;
+                const ix = x + itemGap + (i % perRow) * (itemSize + itemGap);
+                const iy = y + bufferHeight - (Math.floor(i / perRow) + 1) * (itemSize + itemGap);
+                ctx.fillRect(ix, iy, itemSize, itemSize);
+            }
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Raw materials
+            ctx.fillStyle = COLORS.area;
+            ctx.fillRect(coords.source.x, coords.source.y, stageWidth, bufferHeight);
+            drawLabel('Raw Materials', coords.source.x + stageWidth / 2, coords.source.y - 15);
+            drawItems(state.buffer1, coords.source.x, coords.source.y, stageWidth);
+            drawLabel(`${state.buffer1.length} units`, coords.source.x + stageWidth / 2, coords.source.y + bufferHeight + 22, 400, 14);
+
+            // Flash on/off about 3 times a second while running; stay lit when paused
+            const flashOn = !isRunning || Math.floor(performance.now() / 160) % 2 === 0;
+
+            // Buffers
+            const boxSlots = Math.floor((bufferWidth - itemGap) / (itemSize + itemGap)) *
+                             Math.floor((bufferHeight - itemGap) / (itemSize + itemGap));
+            [['buffer2', 'Buffer 1-2'], ['buffer3', 'Buffer 2-3']].forEach(([key, label]) => {
+                const pos = coords[key];
+                const count = state[key].length;
+                const cap = capOf(key);
+                // "Overflow!" only when buffer space is unlimited and more units
+                // are waiting than the box can hold
+                if (!settings.limitBuffers && count > boxSlots) {
+                    drawLabel('Overflow!', pos.x + bufferWidth / 2, pos.y - 42, 800, 18,
+                              flashOn ? COLORS.overflow : COLORS.overflowAlt);
+                }
+                ctx.fillStyle = COLORS.area;
+                ctx.fillRect(pos.x, pos.y, bufferWidth, bufferHeight);
+                if (count >= cap) {
+                    ctx.lineWidth = 2;
+                    ctx.strokeStyle = COLORS.blocked;
+                    ctx.strokeRect(pos.x, pos.y, bufferWidth, bufferHeight);
+                }
+                drawLabel(label, pos.x + bufferWidth / 2, pos.y - 15);
+                drawItems(state[key], pos.x, pos.y, bufferWidth);
+                const capText = Number.isFinite(cap) ? `${count} / ${cap}` : `${count}`;
+                drawLabel(capText, pos.x + bufferWidth / 2, pos.y + bufferHeight + 22, 400, 14,
+                          count >= cap ? '#d6bcfa' : '#e2e8f0');
+            });
+
+            // Stages
+            const minRate = Math.min(settings.rates.stage1, settings.rates.stage2, settings.rates.stage3);
+
+            STAGE_IO.forEach(({ key }, i) => {
+                const pos = coords[key];
+                const stage = state[key];
+                const condition = stageCondition(i);
+                const bottleneck = settings.rates[key] === minRate;
+                const cx = pos.x + stageWidth / 2;
+
+                // Box (blocking stages get a magenta tint so they stand out)
+                ctx.fillStyle = condition === 'blocking' && flashOn ? '#5e3f66' : '#4a5568';
+                ctx.fillRect(pos.x, pos.y, stageWidth, stageHeight);
+
+                // Border
+                if (condition === 'blocking') {
+                    ctx.lineWidth = 6;
+                    ctx.strokeStyle = flashOn ? COLORS.blocking : COLORS.blockingAlt;
+                    ctx.strokeRect(pos.x - 1, pos.y - 1, stageWidth + 2, stageHeight + 2);
+                } else if (condition === 'starving') {
+                    ctx.lineWidth = 4;
+                    ctx.strokeStyle = COLORS.starving;
+                    ctx.strokeRect(pos.x, pos.y, stageWidth, stageHeight);
+                } else if (bottleneck) {
+                    ctx.lineWidth = 4;
+                    ctx.strokeStyle = COLORS.bottleneck;
+                    ctx.strokeRect(pos.x, pos.y, stageWidth, stageHeight);
+                }
+
+                if (bottleneck) drawLabel('Bottleneck', cx, pos.y - 40, 800, 15, COLORS.bottleneck);
+                drawLabel(`Stage ${i + 1}`, cx, pos.y - 15);
+                drawLabel(`Rate: ${settings.rates[key].toFixed(0)}/min`, cx, pos.y + stageHeight + 20, 400, 14);
+
+                // Status text inside the box; the unit moves along the lower half
+                const hasText = condition !== 'normal';
+                if (condition === 'blocking') {
+                    drawLabel('Blocking', cx, pos.y + 24, 800, 16, flashOn ? COLORS.blocking : '#ffffff');
+                } else if (condition === 'starving') {
+                    drawLabel('Starving', cx, pos.y + 24, 800, 16, COLORS.starving);
+                }
+
+                if (stage.item) {
+                    const progress = stage.duration ? 1 - stage.timeRemaining / stage.duration : 1;
+                    const x = pos.x + 4 + (stageWidth - itemSize - 8) * progress;
+                    const y = hasText ? pos.y + stageHeight - itemSize - 8 : pos.y + stageHeight / 2 - itemSize / 2;
+                    ctx.fillStyle = stage.item.color;
+                    ctx.fillRect(x, y, itemSize, itemSize);
+                }
+            });
+
+            // Legend
+            const legend = [
+                [COLORS.bottleneck, 'Bottleneck (slowest rate)'],
+                [COLORS.starving, 'Starving (no input)'],
+                [COLORS.blocking, 'Blocking (next buffer full)'],
+                [COLORS.blocked, 'Buffer full']
+            ];
+            let lx = 50;
+            const ly = 355;
+            legend.forEach(([color, text]) => {
+                ctx.lineWidth = 3;
+                ctx.strokeStyle = color;
+                ctx.strokeRect(lx, ly - 11, 16, 14);
+                drawLabel(text, lx + 24, ly + 1, 400, 14, '#cbd5e0', 'left');
+                lx += 24 + ctx.measureText(text).width + 36;
+            });
+        }
+
+        // ---- Init ----
+        canvas.width = 1100;
+        canvas.height = 400;
+        syncCapInputs();
+        refresh();
+        if (document.fonts && document.fonts.ready) document.fonts.ready.then(draw);
+    </script>
+</body>
+</html>
